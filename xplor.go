@@ -6,10 +6,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path"
-	"sort"
 	"strings"
 
 	"9fans.net/go/acme"
@@ -17,460 +18,364 @@ import (
 	"9fans.net/go/plumb"
 )
 
-var (
-	root       string
-	w          *acme.Win
-	PLAN9      = os.Getenv("PLAN9")
-	showHidden bool
-)
-
 const (
-	NBUF      = 512
-	INDENT    = "	"
-	dirflag   = "+ "
-	nodirflag = "  "
+	this     = "xplor"
+	tag      = "Get All Up Win Xplor "
+	tab      = "\t"
+	flagFile = " "
+	flagLess = "▸"
+	flagMore = "▾"
 )
 
-type dir struct {
-	charaddr string
-	depth    int
-}
+var (
+	PLAN9 = os.Getenv("PLAN9")
+	all   = flag.Bool("a", false, "Include directory entries whose names begin with a dot (.)")
+	open  = map[string]bool{}
+	win   *acme.Win
+	root  string
+)
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: xplor [path] \n")
+	fmt.Fprintf(os.Stderr, "usage: %s [options] [path]\n", this)
 	flag.PrintDefaults()
 	os.Exit(2)
 }
 
 func main() {
+	log.SetFlags(0)
 	flag.Usage = usage
 	flag.Parse()
-
-	args := flag.Args()
-
-	switch len(args) {
-	case 0:
-		root, _ = os.Getwd()
-	case 1:
-		temp := path.Clean(args[0])
-		if temp[0] != '/' {
-			cwd, _ := os.Getwd()
-			root = path.Join(cwd, temp)
-		} else {
-			root = temp
+	if err := setup(); err != nil {
+		log.Fatal(err)
+	}
+	defer win.CloseFiles()
+	for e := range win.EventChan() {
+		if err := handle(e); err != nil {
+			log.Print(err)
 		}
+	}
+}
+
+// Setup
+
+func setup() error {
+	if err := findRoot(); err != nil {
+		return err
+	}
+	return openWindow()
+}
+
+func findRoot() error {
+	switch flag.NArg() {
+	case 0: // start at .
+		var err error
+		root, err = os.Getwd()
+		return err
+	case 1: // start at path
+		root = path.Clean(flag.Arg(1))
+		if path.IsAbs(root) {
+			return nil
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		root = path.Join(cwd, root)
+		return nil
 	default:
 		usage()
-	}
-
-	err := initWindow()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		return
-	}
-
-	for word := range events() {
-		if len(word) >= 6 && word[0:6] == "DotDot" {
-			doDotDot()
-			continue
-		}
-		if len(word) >= 6 && word[0:6] == "Hidden" {
-			toggleHidden()
-			continue
-		}
-		if len(word) >= 3 && word[0:3] == "Win" {
-			if PLAN9 != "" {
-				cmd := path.Join(PLAN9, "bin/win")
-				doExec(word[3:len(word)], cmd)
-			}
-			continue
-		}
-		// yes, this does not cover all possible cases. I'll do better if anyone needs it.
-		if len(word) >= 5 && word[0:5] == "Xplor" {
-			cmd, err := exec.LookPath("xplor")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, err.Error())
-				continue
-			}
-			doExec(word[5:len(word)], cmd)
-			continue
-		}
-		if word[0] == 'X' {
-			onExec(word[1:len(word)])
-			continue
-		}
-		onLook(word)
+		return nil
 	}
 }
 
-func initWindow() error {
-	var err error = nil
-	w, err = acme.New()
+func openWindow() error {
+	var err error
+	win, err = acme.New()
 	if err != nil {
 		return err
 	}
-
-	title := "xplor-" + root
-	w.Name(title)
-	tag := "DotDot Win Xplor Hidden"
-	w.Write("tag", []byte(tag))
-
-	if err := printDirContents(root, 0); err != nil {
+	if err := win.Fprintf("tag", "%s", tag); err != nil {
 		return err
 	}
-	if err := setDumpCommand(root); err != nil {
+	if err := win.Ctl("dump %s", this); err != nil {
 		return err
+	}
+	if err := win.Ctl("dumpdir %s", root); err != nil {
+		return err
+	}
+	return draw()
+}
+
+// Drawing Structure
+
+func draw() error {
+	if err := win.Name("%s-%s", this, root); err != nil {
+		return err
+	}
+	if err := printRoot(); err != nil {
+		return err
+	}
+	return win.Ctl("clean")
+}
+
+func clear() error {
+	if err := win.Addr("0,$"); err != nil {
+		return err
+	}
+	return win.Fprintf("data", "")
+}
+
+func redraw() error {
+	if err := clear(); err != nil {
+		return err
+	}
+	return draw()
+}
+
+// Directory Listing
+
+func printRoot() error {
+	return printDir(root, 0)
+}
+
+func printDir(dir string, depth int) error {
+	infos, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	tabs := strings.Repeat(tab, depth)
+	for _, info := range infos {
+		name := info.Name()
+		if strings.HasPrefix(name, ".") && !*all {
+			continue
+		}
+		path := path.Join(dir, name)
+		flag := flagFile
+		if info.IsDir() {
+			flag = flagLess
+			if open[path] {
+				flag = flagMore
+			}
+		}
+		if err := win.Fprintf("data", "%s %s%s\n", flag, tabs, name); err != nil {
+			return err
+		}
+		if flag == flagMore {
+			if err := printDir(path, depth+1); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
-func setDumpCommand(dumpdir string) error {
-	if err := w.Ctl("dump xplor"); err != nil {
+// Buffer Interaction
+
+func toggleAll() error {
+	*all = !*all
+	return redraw()
+}
+
+func goUp() error {
+	root = path.Join(root, "..")
+	return redraw()
+}
+
+// Line Interaction
+
+func look(addr string) error {
+	path, err := abspath(addr)
+	if err != nil {
 		return err
 	}
-	if err := w.Ctl("dumpdir " + dumpdir); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		return err
 	}
+	if !info.IsDir() {
+		return send(path)
+	}
+	open[path] = !open[path]
+	return redraw()
+}
+
+func print(addr string) error {
+	path, err := abspath(addr)
+	if err != nil {
+		return err
+	}
+	log.Print(path)
 	return nil
 }
 
-func printDirContents(dirpath string, depth int) (err error) {
-	currentDir, err := os.OpenFile(dirpath, os.O_RDONLY, 0644)
-	line := ""
+// Parsing Structure
+
+// Determine entry name, depth
+func entry(format string, args ...interface{}) (string, int, error) {
+	fail := func(err error) (string, int, error) {
+		return "", 0, err
+	}
+	if err := win.Addr(format, args...); err != nil {
+		return fail(err)
+	}
+	buf, err := win.ReadAll("xdata")
+	if err != nil {
+		return fail(err)
+	}
+	line := strings.TrimSuffix(string(buf), "\n")
+	if !strings.Contains(line, " ") {
+		return fail(nil)
+	}
+	line = strings.SplitN(line, " ", 2)[1]
+	name := strings.TrimLeft(line, tab)
+	depth := (len(line) - len(name)) / len(tab)
+	return name, depth, nil
+}
+
+// Determine absolute path
+func abspath(addr string) (string, error) {
+	fail := func(err error) (string, error) {
+		return "", err
+	}
+	dir, depth, err := entry("%s-+", addr) // line containing addr
+	if err != nil {
+		return fail(err)
+	}
+	if dir == "" {
+		return fail(nil)
+	}
+	for level := depth; level > 0; level-- {
+		tabs := strings.Repeat(tab, level-1)
+		parent, _, err := entry("%s-/^..%s[^%s]/-+", addr, tabs, tab) // line at depth before addr
+		if err != nil {
+			return fail(err)
+		}
+		dir = path.Join(parent, dir)
+	}
+	return path.Join(root, dir), nil
+}
+
+// System Interaction
+
+func send(path string) error {
+	port, err := plumb.Open("send", plan9.OWRITE)
 	if err != nil {
 		return err
 	}
-	names, err := currentDir.Readdirnames(-1)
-	if err != nil {
-		return err
+	defer port.Close()
+	msg := &plumb.Message{
+		Src:  this,
+		Dst:  "",
+		Dir:  root,
+		Type: "text",
+		Data: []byte(path),
 	}
-	currentDir.Close()
+	return msg.Send(port)
+}
 
-	sort.Strings(names)
-	indents := ""
-	for i := 0; i < depth; i++ {
-		indents = indents + INDENT
-	}
-	fullpath := ""
-	var fi os.FileInfo
-	for _, v := range names {
-		line = nodirflag + indents + v + "\n"
-		isNotHidden := !strings.HasPrefix(v, ".")
-		if isNotHidden || showHidden {
-			fullpath = path.Join(dirpath, v)
-			fi, err = os.Stat(fullpath)
+func run(exe, dir string) error {
+	cmd := exec.Command(exe)
+	cmd.Dir = dir
+	return cmd.Start()
+}
+
+// Event Handling
+
+func handle(e *acme.Event) error {
+	switch e.C2 {
+	// exec
+	// - tag
+	case 'x':
+		switch string(e.Text) {
+		case "Del":
+			return win.Del(true)
+		case "Get":
+			return redraw()
+		case "All":
+			return toggleAll()
+		case "Up":
+			return goUp()
+		case "Win":
+			exe := path.Join(PLAN9, "bin", "win")
+			dir, err := loc(e)
 			if err != nil {
-				_, ok := err.(*os.PathError)
-				if !ok {
-					panic("Not a *os.PathError")
-				}
-				if !os.IsNotExist(err) {
-					return err
-				}
-				// Skip (most likely) broken symlinks
-				fmt.Fprintf(os.Stderr, "%v\n", err.Error())
-				continue
+				return err
 			}
-			if fi.IsDir() {
-				line = dirflag + indents + v + "\n"
-			}
-			w.Write("data", []byte(line))
-			if fi.IsDir() && len(names) == 1 {
-				printDirContents(fullpath, depth+1)
-			}
-		}
-	}
-
-	if depth == 0 {
-		//lame trick for now to dodge the out of range issue, until my address-foo gets better
-		w.Write("body", []byte("\n"))
-		w.Write("body", []byte("\n"))
-		w.Write("body", []byte("\n"))
-	}
-
-	return err
-}
-
-func readLine(addr string) ([]byte, error) {
-	var b []byte = make([]byte, NBUF)
-	var err error = nil
-	err = w.Addr("%s", addr)
-	if err != nil {
-		return b, err
-	}
-	n, err := w.Read("xdata", b)
-
-	// remove dirflag, if any
-	if n < 2 {
-		return b[0 : n-1], err
-	}
-	return b[2 : n-1], err
-}
-
-func getDepth(line []byte) (depth int, trimedline string) {
-	trimedline = strings.TrimLeft(string(line), INDENT)
-	depth = (len(line) - len(trimedline)) / len(INDENT)
-	return depth, trimedline
-}
-
-func isFolded(charaddr string) (bool, error) {
-	var err error = nil
-	var b []byte
-	addr := "#" + charaddr + "+1-"
-	b, err = readLine(addr)
-	if err != nil {
-		return true, err
-	}
-	depth, _ := getDepth(b)
-	addr = "#" + charaddr + "+-"
-	b, err = readLine(addr)
-	if err != nil {
-		return true, err
-	}
-	nextdepth, _ := getDepth(b)
-	return (nextdepth <= depth), err
-}
-
-func getParents(charaddr string, depth int, prevline int) string {
-	var addr string
-	if depth == 0 {
-		return ""
-	}
-	if prevline == 1 {
-		addr = "#" + charaddr + "-+"
-	} else {
-		addr = "#" + charaddr + "-" + fmt.Sprint(prevline-1)
-	}
-	for {
-		b, err := readLine(addr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-		newdepth, line := getDepth(b)
-		if newdepth < depth {
-			fullpath := path.Join(getParents(charaddr, newdepth, prevline), line)
-			return fullpath
-		}
-		prevline++
-		addr = "#" + charaddr + "-" + fmt.Sprint(prevline-1)
-	}
-	return ""
-}
-
-// TODO(mpl): maybe break this one in a fold and unfold functions
-func onLook(charaddr string) {
-	// reconstruct full path and check if file or dir
-	addr := "#" + charaddr + "+1-"
-	b, err := readLine(addr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		return
-	}
-	depth, line := getDepth(b)
-	fullpath := path.Join(root, getParents(charaddr, depth, 1), line)
-	fi, err := os.Stat(fullpath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		return
-	}
-
-	if !fi.IsDir() {
-		// not a dir -> send that file to the plumber
-		port, err := plumb.Open("send", plan9.OWRITE)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-			return
-		}
-		defer port.Close()
-		msg := &plumb.Message{
-			Src:  "xplor",
-			Dst:  "",
-			Dir:  "/",
-			Type: "text",
-			Data: []byte(fullpath),
-		}
-		if err := msg.Send(port); err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-		}
-		return
-	}
-
-	folded, err := isFolded(charaddr)
-	if err != nil {
-		fmt.Fprint(os.Stderr, err.Error())
-		return
-	}
-	if folded {
-		// print dir contents
-		addr = "#" + charaddr + "+2-1-#0"
-		err = w.Addr("%s", addr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error()+addr)
-			return
-		}
-		err = printDirContents(fullpath, depth+1)
-		if err != nil {
-			fmt.Fprint(os.Stderr, err.Error())
-		}
-	} else {
-		// fold, ie delete lines below dir until we hit a dir of the same depth
-		addr = "#" + charaddr + "+-"
-		nextdepth := depth + 1
-		nextline := 1
-		for nextdepth > depth {
-			err = w.Addr("%s", addr)
+			return run(exe, dir)
+		case "Xplor":
+			exe := this
+			dir, err := loc(e)
 			if err != nil {
-				fmt.Fprint(os.Stderr, err.Error())
-				return
+				return err
 			}
-			b, err = readLine(addr)
-			if err != nil {
-				fmt.Fprint(os.Stderr, err.Error())
-				return
-			}
-			nextdepth, _ = getDepth(b)
-			nextline++
-			addr = "#" + charaddr + "+" + fmt.Sprint(nextline-1)
+			return run(exe, dir)
+		default:
+			return win.WriteEvent(e)
 		}
-		nextline--
-		addr = "#" + charaddr + "+-#0,#" + charaddr + "+" + fmt.Sprint(nextline-2)
-		err = w.Addr("%s", addr)
-		if err != nil {
-			fmt.Fprint(os.Stderr, err.Error())
-			return
+	// - body
+	case 'X':
+		if isComplex(e) {
+			return win.WriteEvent(e)
 		}
-		w.Write("data", []byte(""))
+		return print(q(e))
+	// look
+	// - tag
+	case 'l':
+		return win.WriteEvent(e)
+	// - body
+	case 'L':
+		if isComplex(e) {
+			return win.WriteEvent(e)
+		}
+		return look(q(e))
+	default:
+		return nil
 	}
 }
 
-func getFullPath(charaddr string) (fullpath string, err error) {
-	// reconstruct full path and print it to Stdout
-	addr := "#" + charaddr + "+1-"
-	b, err := readLine(addr)
-	if err != nil {
-		return fullpath, err
+func isComplex(e *acme.Event) bool {
+	if e.OrigQ0 != e.OrigQ1 {
+		// user has selected text
+		return true
 	}
-	depth, line := getDepth(b)
-	fullpath = path.Join(root, getParents(charaddr, depth, 1), line)
-	return fullpath, err
+	if e.Flag&8 != 0 {
+		// user has chorded argument
+		return true
+	}
+	return false
 }
 
-func doDotDot() {
-	// blank the window
-	err := w.Addr("0,$")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	w.Write("data", []byte(""))
-
-	// restart from ..
-	root = path.Clean(root + "/../")
-	title := "xplor-" + root
-	w.Name(title)
-	err = printDirContents(root, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		os.Exit(1)
-	}
+func q(e *acme.Event) string {
+	return fmt.Sprintf("#%d", e.OrigQ0)
 }
 
-func doExec(loc string, cmd string) {
-	var fullpath string
+func loc(e *acme.Event) (string, error) {
+	fail := func(err error) (string, error) {
+		return "", err
+	}
+	if e.Flag&8 == 0 {
+		return fail(nil)
+	}
+	loc := string(e.Loc)
 	if loc == "" {
-		fullpath = root
-	} else {
-		var err error
-		charaddr := strings.SplitAfterN(loc, ",#", 2)
-		fullpath, err = getFullPath(charaddr[1])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-			return
-		}
-		fi, err := os.Stat(fullpath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-			return
-		}
-		if !fi.IsDir() {
-			fullpath, _ = path.Split(fullpath)
-		}
+		return fail(nil)
 	}
-	var args []string = make([]string, 1)
-	args[0] = cmd
-	fds := []*os.File{os.Stdin, os.Stdout, os.Stderr}
-	_, err := os.StartProcess(args[0], args, &os.ProcAttr{Env: os.Environ(), Dir: fullpath, Files: fds})
+	prefix := fmt.Sprintf("%s-%s:", this, root)
+	if !strings.HasPrefix(loc, prefix) {
+		return fail(nil)
+	}
+	loc = strings.TrimPrefix(loc, prefix)
+	addrs := strings.SplitN(loc, ",", 2)
+	dir, err := abspath(addrs[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		return
+		return fail(err)
 	}
-	return
-}
-
-// on a B2 click event we print the fullpath of the file to Stdout.
-// This can come in handy for paths with spaces in it, because the
-// plumber will fail to open them.  Printing it to Stdout allows us to do
-// whatever we want with it when that happens.
-// Also usefull with a dir path: once printed to stdout, a B3 click on
-// the path to open it the "classic" acme way.
-func onExec(charaddr string) {
-	fullpath, err := getFullPath(charaddr)
+	info, err := os.Stat(dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		return
+		return fail(err)
 	}
-	fmt.Fprintf(os.Stderr, fullpath+"\n")
-}
-
-func toggleHidden() {
-	showHidden = !showHidden
-}
-
-func events() <-chan string {
-	c := make(chan string, 10)
-	go func() {
-		for e := range w.EventChan() {
-			switch e.C2 {
-			case 'x': // execute in tag
-				switch string(e.Text) {
-				case "Del":
-					w.Ctl("delete")
-				case "Hidden":
-					c <- "Hidden"
-				case "DotDot":
-					c <- "DotDot"
-				case "Win":
-					tmp := ""
-					if e.Flag != 0 {
-						tmp = string(e.Loc)
-					}
-					c <- ("Win" + tmp)
-				case "Xplor":
-					tmp := ""
-					if e.Flag != 0 {
-						tmp = string(e.Loc)
-					}
-					c <- ("Xplor" + tmp)
-				default:
-					w.WriteEvent(e)
-				}
-			case 'X': // execute in body
-				c <- ("X" + fmt.Sprint(e.OrigQ0))
-			case 'l': // button 3 in tag
-				// let the plumber deal with it
-				w.WriteEvent(e)
-			case 'L': // button 3 in body
-				w.Ctl("clean")
-				//ignore expansions
-				if e.OrigQ0 != e.OrigQ1 {
-					continue
-				}
-				c <- fmt.Sprint(e.OrigQ0)
-			}
-		}
-		w.CloseFiles()
-		close(c)
-	}()
-	return c
+	if info.IsDir() {
+		return dir, nil
+	}
+	return path.Dir(dir), nil
 }
