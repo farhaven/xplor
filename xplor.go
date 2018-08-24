@@ -72,7 +72,7 @@ func findRoot() error {
 		root, err = os.Getwd()
 		return err
 	case 1: // start at path
-		root = path.Clean(flag.Arg(1))
+		root = path.Clean(flag.Arg(0))
 		if path.IsAbs(root) {
 			return nil
 		}
