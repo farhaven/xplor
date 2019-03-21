@@ -10,7 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"9fans.net/go/acme"
@@ -72,15 +72,15 @@ func findRoot() error {
 		root, err = os.Getwd()
 		return err
 	case 1: // start at path
-		root = path.Clean(flag.Arg(0))
-		if path.IsAbs(root) {
+		root = filepath.Clean(flag.Arg(0))
+		if filepath.IsAbs(root) {
 			return nil
 		}
 		cwd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
-		root = path.Join(cwd, root)
+		root = filepath.Join(cwd, root)
 		return nil
 	default:
 		usage()
@@ -140,7 +140,7 @@ func printDir(dir string, depth int) error {
 		if strings.HasPrefix(name, ".") && !*all {
 			continue
 		}
-		path := path.Join(dir, name)
+		path := filepath.Join(dir, name)
 		flag := flagFile
 		if info.IsDir() {
 			flag = flagLess
@@ -168,7 +168,7 @@ func toggleAll() error {
 }
 
 func goUp() error {
-	root = path.Join(root, "..")
+	root = filepath.Join(root, "..")
 	return redraw()
 }
 
@@ -241,9 +241,9 @@ func abspath(addr string) (string, error) {
 		if err != nil {
 			return fail(err)
 		}
-		dir = path.Join(parent, dir)
+		dir = filepath.Join(parent, dir)
 	}
-	return path.Join(root, dir), nil
+	return filepath.Join(root, dir), nil
 }
 
 // System Interaction
@@ -287,7 +287,7 @@ func handle(e *acme.Event) error {
 		case "Up":
 			return goUp()
 		case "Win":
-			exe := path.Join(PLAN9, "bin", "win")
+			exe := filepath.Join(PLAN9, "bin", "win")
 			dir, err := loc(e)
 			if err != nil {
 				return err
@@ -368,5 +368,5 @@ func loc(e *acme.Event) (string, error) {
 	if info.IsDir() {
 		return dir, nil
 	}
-	return path.Dir(dir), nil
+	return filepath.Dir(dir), nil
 }
