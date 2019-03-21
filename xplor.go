@@ -118,17 +118,8 @@ func draw() error {
 	return win.Ctl("clean")
 }
 
-func clear() error {
-	if err := win.Addr("0,$"); err != nil {
-		return err
-	}
-	return win.Fprintf("data", "")
-}
-
 func redraw() error {
-	if err := clear(); err != nil {
-		return err
-	}
+	win.Clear()
 	return draw()
 }
 
