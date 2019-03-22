@@ -175,7 +175,7 @@ func goUp() error {
 // Line Interaction
 
 func look(addr string) error {
-	path, err := abspath(addr)
+	path, _, err := abspath(addr)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func focus(path string) error {
 }
 
 func print(addr string) error {
-	path, err := abspath(addr)
+	path, _, err := abspath(addr)
 	if err != nil {
 		return err
 	}
@@ -243,10 +243,10 @@ func entry(format string, args ...interface{}) (string, int, error) {
 	return name, depth, nil
 }
 
-// Determine absolute path
-func abspath(addr string) (string, error) {
-	fail := func(err error) (string, error) {
-		return "", err
+// Determine absolute path, depth
+func abspath(addr string) (string, int, error) {
+	fail := func(err error) (string, int, error) {
+		return "", 0, err
 	}
 	dir, depth, err := entry("%s-+", addr) // line containing addr
 	if err != nil {
@@ -263,7 +263,7 @@ func abspath(addr string) (string, error) {
 		}
 		dir = filepath.Join(parent, dir)
 	}
-	return filepath.Join(root, dir), nil
+	return filepath.Join(root, dir), depth, nil
 }
 
 // Determine components of path
@@ -389,7 +389,7 @@ func loc(e *acme.Event) (string, error) {
 	}
 	loc = strings.TrimPrefix(loc, prefix)
 	addrs := strings.SplitN(loc, ",", 2)
-	dir, err := abspath(addrs[0])
+	dir, _, err := abspath(addrs[0])
 	if err != nil {
 		return fail(err)
 	}
