@@ -4,8 +4,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -112,7 +114,11 @@ func draw() error {
 	if err := win.Name("%s-%s", this, root); err != nil {
 		return err
 	}
-	if err := printRoot(); err != nil {
+	var b bytes.Buffer
+	if err := printRoot(&b); err != nil {
+		return err
+	}
+	if _, err := win.Write("data", b.Bytes()); err != nil {
 		return err
 	}
 	if err := win.Ctl("clean"); err != nil {
@@ -136,11 +142,11 @@ func redrawDir(path, addr string, depth int) error {
 
 // Directory Listing
 
-func printRoot() error {
-	return printDir(root, 0)
+func printRoot(w io.Writer) error {
+	return printDir(w, root, 0)
 }
 
-func printDir(dir string, depth int) error {
+func printDir(w io.Writer, dir string, depth int) error {
 	infos, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -159,11 +165,11 @@ func printDir(dir string, depth int) error {
 				flag = flagMore
 			}
 		}
-		if err := win.Fprintf("data", "%s %s%s\n", flag, tabs, name); err != nil {
+		if _, err := fmt.Fprintf(w, "%s %s%s\n", flag, tabs, name); err != nil {
 			return err
 		}
 		if flag == flagMore {
-			if err := printDir(path, depth+1); err != nil {
+			if err := printDir(w, path, depth+1); err != nil {
 				return err
 			}
 		}
@@ -175,7 +181,12 @@ func insertDir(path, addr string, depth int) error {
 	if err := win.Addr("%s+/^/", addr); err != nil {
 		return err
 	}
-	return printDir(path, depth+1)
+	var b bytes.Buffer
+	if err := printDir(&b, path, depth+1); err != nil {
+		return err
+	}
+	_, err := win.Write("data", b.Bytes())
+	return err
 }
 
 func removeDir(path, addr string, depth int) error {
