@@ -1,4 +1,5 @@
 // 2010 - Mathieu Lonjaret
+// 2018 - Martin Kühl
 
 // The xplor program is an acme files explorer, tree style.
 package main
