@@ -123,6 +123,14 @@ func redraw() error {
 	return draw()
 }
 
+func redrawDir(path, addr string, depth int) error {
+	if open[path] {
+		return insertDir(path, addr, depth)
+	} else {
+		return removeDir(path, addr, depth)
+	}
+}
+
 // Directory Listing
 
 func printRoot() error {
@@ -160,6 +168,22 @@ func printDir(dir string, depth int) error {
 	return nil
 }
 
+func insertDir(path, addr string, depth int) error {
+	if err := win.Addr("%s+/^/", addr); err != nil {
+		return err
+	}
+	return printDir(path, depth+1)
+}
+
+func removeDir(path, addr string, depth int) error {
+	tabs := strings.Repeat(tab, depth)
+	if err := win.Addr("%s+/^/,%s+/^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
+		return err
+	}
+	_, err := win.Write("data", nil)
+	return err
+}
+
 // Buffer Interaction
 
 func toggleAll() error {
@@ -175,7 +199,7 @@ func goUp() error {
 // Line Interaction
 
 func look(addr string) error {
-	path, _, err := abspath(addr)
+	path, depth, err := abspath(addr)
 	if err != nil {
 		return err
 	}
@@ -187,7 +211,7 @@ func look(addr string) error {
 		return send(path)
 	}
 	open[path] = !open[path]
-	if err := redraw(); err != nil {
+	if err := redrawDir(path, addr, depth); err != nil {
 		return err
 	}
 	return focus(path)
