@@ -115,7 +115,10 @@ func draw() error {
 	if err := printRoot(); err != nil {
 		return err
 	}
-	return win.Ctl("clean")
+	if err := win.Ctl("clean"); err != nil {
+		return err
+	}
+	return focus(root)
 }
 
 func redraw() error {
