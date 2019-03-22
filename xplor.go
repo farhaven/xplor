@@ -187,7 +187,27 @@ func look(addr string) error {
 		return send(path)
 	}
 	open[path] = !open[path]
-	return redraw()
+	if err := redraw(); err != nil {
+		return err
+	}
+	return focus(path)
+}
+
+func focus(path string) error {
+	path, err := filepath.Rel(root, path)
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	b.WriteString("#0")
+	for depth, name := range split(path) {
+		tabs := strings.Repeat(tab, depth)
+		fmt.Fprintf(&b, "+/^..%s%s/", tabs, name)
+	}
+	if err := win.Addr("%s", b.String()); err != nil {
+		return err
+	}
+	return win.Ctl("dot=addr\nshow")
 }
 
 func print(addr string) error {
@@ -244,6 +264,18 @@ func abspath(addr string) (string, error) {
 		dir = filepath.Join(parent, dir)
 	}
 	return filepath.Join(root, dir), nil
+}
+
+// Determine components of path
+func split(path string) []string {
+	var part string
+	parts := make([]string, 0)
+	for path != "" && path != "." {
+		path, part = filepath.Split(path)
+		path = filepath.Clean(path)
+		parts = append([]string{part}, parts...)
+	}
+	return parts
 }
 
 // System Interaction
