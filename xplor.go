@@ -207,10 +207,16 @@ func insertDir(path, addr string, depth int) error {
 
 func removeDir(path, addr string, depth int) error {
 	name := filepath.Base(path)
-	tabs := strings.Repeat(tab, depth)
-	if err := win.Addr("%s-/^/+/^/,%s+/^$|^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
+	var end strings.Builder // next line with at most depth tabs
+	end.WriteString("^$")
+	for i := 0; i <= depth; i++ {
+		tabs := strings.Repeat(tab, i)
+		fmt.Fprintf(&end, "|^..%s[^%s]", tabs, tab)
+	}
+	if err := win.Addr("%s-/^/+/^/,%s+/%s/-/^/", addr, addr, end.String()); err != nil {
 		return err
 	}
+	tabs := strings.Repeat(tab, depth)
 	return win.Fprintf("data", "%s %s%s\n", flagLess, tabs, name)
 }
 
