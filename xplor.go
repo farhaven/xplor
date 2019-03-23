@@ -131,7 +131,7 @@ func draw() error {
 	if err := win.Ctl("clean"); err != nil {
 		return err
 	}
-	return focus(root)
+	return selectEntry(root)
 }
 
 func redraw() error {
@@ -139,85 +139,63 @@ func redraw() error {
 	return draw()
 }
 
-func redrawDir(path, addr string, depth int) error {
-	if open[path] {
-		return insertDir(path, addr, depth)
-	} else {
-		return removeDir(path, addr, depth)
-	}
-}
-
-// Directory Listing
-
-func printRoot(w io.Writer) error {
-	if err := printDir(w, root, 0); err != nil {
-		return err
-	}
-	_, err := io.WriteString(w, "\n") // so acme can write after the last entry
-	return err
-}
-
-func printDir(w io.Writer, dir string, depth int) error {
-	infos, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	tabs := strings.Repeat(tab, depth)
-	for _, info := range infos {
-		name := info.Name()
-		if strings.HasPrefix(name, ".") && !*all {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		flag := flagFile
-		if info.IsDir() {
-			flag = flagLess
-			if open[path] {
-				flag = flagMore
-			}
-		}
-		if _, err := fmt.Fprintf(w, "%s %s%s\n", flag, tabs, name); err != nil {
-			return err
-		}
-		if flag == flagMore {
-			if err := printDir(w, path, depth+1); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func insertDir(path, addr string, depth int) error {
-	name := filepath.Base(path)
-	tabs := strings.Repeat(tab, depth)
-	if err := win.Addr("%s-+", addr); err != nil {
+func redrawEntry(path string, info os.FileInfo, addr string, depth int) error {
+	if err := selectEntryRegion(addr, depth); err != nil {
 		return err
 	}
 	var b bytes.Buffer
-	if _, err := fmt.Fprintf(&b, "%s %s%s\n", flagMore, tabs, name); err != nil {
-		return err
-	}
-	if err := printDir(&b, path, depth+1); err != nil {
+	if err := printEntry(&b, path, info, depth); err != nil {
 		return err
 	}
 	_, err := win.Write("data", b.Bytes())
 	return err
 }
 
-func removeDir(path, addr string, depth int) error {
-	name := filepath.Base(path)
-	var end strings.Builder // next line with at most depth tabs
-	end.WriteString("^$")
-	for i := 0; i <= depth; i++ {
-		tabs := strings.Repeat(tab, i)
-		fmt.Fprintf(&end, "|^..%s[^%s]", tabs, tab)
-	}
-	if err := win.Addr("%s-/^/+/^/,%s+/%s/-/^/", addr, addr, end.String()); err != nil {
+// Directory Listing
+
+func printRoot(w io.Writer) error {
+	if err := printContents(w, root, 0); err != nil {
 		return err
 	}
+	_, err := io.WriteString(w, "\n") // so acme can write after the last entry
+	return err
+}
+
+func printContents(w io.Writer, dir string, depth int) error {
+	infos, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, info := range infos {
+		name := info.Name()
+		path := filepath.Join(dir, name)
+		if err := printEntry(w, path, info, depth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printEntry(w io.Writer, path string, info os.FileInfo, depth int) error {
+	name := filepath.Base(path)
+	if strings.HasPrefix(name, ".") && !*all {
+		return nil
+	}
+	flag := flagFile
+	if info.IsDir() {
+		flag = flagLess
+		if open[path] {
+			flag = flagMore
+		}
+	}
 	tabs := strings.Repeat(tab, depth)
-	return win.Fprintf("data", "%s %s%s\n", flagLess, tabs, name)
+	if _, err := fmt.Fprintf(w, "%s %s%s\n", flag, tabs, name); err != nil {
+		return err
+	}
+	if flag == flagMore {
+		return printContents(w, path, depth+1)
+	}
+	return nil
 }
 
 // Buffer Interaction
@@ -247,27 +225,10 @@ func look(addr string) error {
 		return send(path)
 	}
 	open[path] = !open[path]
-	if err := redrawDir(path, addr, depth); err != nil {
+	if err := redrawEntry(path, info, addr, depth); err != nil {
 		return err
 	}
-	return focus(path)
-}
-
-func focus(path string) error {
-	path, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
-	}
-	var b strings.Builder
-	b.WriteString("#0")
-	for depth, name := range split(path) {
-		tabs := strings.Repeat(tab, depth)
-		fmt.Fprintf(&b, "+/^..%s%s/", tabs, name)
-	}
-	if err := win.Addr("%s", b.String()); err != nil {
-		return err
-	}
-	return win.Ctl("dot=addr\nshow")
+	return selectEntry(path)
 }
 
 func print(addr string) error {
@@ -277,6 +238,35 @@ func print(addr string) error {
 	}
 	log.Print(path)
 	return nil
+}
+
+// Selection
+
+func selectEntry(path string) error {
+	path, err := filepath.Rel(root, path)
+	if err != nil {
+		return err
+	}
+	var steps strings.Builder
+	steps.WriteString("0") // beginning
+	for depth, name := range split(path) {
+		tabs := strings.Repeat(tab, depth)
+		fmt.Fprintf(&steps, "+/^..%s%s/", tabs, name) // next entry
+	}
+	if err := win.Addr("%s", steps.String()); err != nil {
+		return err
+	}
+	return win.Ctl("dot=addr\nshow")
+}
+
+func selectEntryRegion(addr string, depth int) error {
+	var end strings.Builder // next line with at most depth tabs
+	end.WriteString("^$")   // last line
+	for i := 0; i <= depth; i++ {
+		tabs := strings.Repeat(tab, i)
+		fmt.Fprintf(&end, "|^..%s[^%s]", tabs, tab) // line with i tabs
+	}
+	return win.Addr("%s-/^/+/^/,%s+/%s/-/^/", addr, addr, end.String())
 }
 
 // Parsing Structure
