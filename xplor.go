@@ -144,7 +144,11 @@ func redrawDir(path, addr string, depth int) error {
 // Directory Listing
 
 func printRoot(w io.Writer) error {
-	return printDir(w, root, 0)
+	if err := printDir(w, root, 0); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, "\n") // so acme can write after the last entry
+	return err
 }
 
 func printDir(w io.Writer, dir string, depth int) error {
@@ -192,7 +196,7 @@ func insertDir(path, addr string, depth int) error {
 
 func removeDir(path, addr string, depth int) error {
 	tabs := strings.Repeat(tab, depth)
-	if err := win.Addr("%s+/^/,%s+/^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
+	if err := win.Addr("%s+/^/,%s+/^$|^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
 		return err
 	}
 	_, err := win.Write("data", nil)
