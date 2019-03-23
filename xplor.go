@@ -183,10 +183,15 @@ func printDir(w io.Writer, dir string, depth int) error {
 }
 
 func insertDir(path, addr string, depth int) error {
-	if err := win.Addr("%s+/^/", addr); err != nil {
+	name := filepath.Base(path)
+	tabs := strings.Repeat(tab, depth)
+	if err := win.Addr("%s-+", addr); err != nil {
 		return err
 	}
 	var b bytes.Buffer
+	if _, err := fmt.Fprintf(&b, "%s %s%s\n", flagMore, tabs, name); err != nil {
+		return err
+	}
 	if err := printDir(&b, path, depth+1); err != nil {
 		return err
 	}
@@ -195,12 +200,12 @@ func insertDir(path, addr string, depth int) error {
 }
 
 func removeDir(path, addr string, depth int) error {
+	name := filepath.Base(path)
 	tabs := strings.Repeat(tab, depth)
-	if err := win.Addr("%s+/^/,%s+/^$|^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
+	if err := win.Addr("%s-/^/+/^/,%s+/^$|^..%s[^%s]/-/^/", addr, addr, tabs, tab); err != nil {
 		return err
 	}
-	_, err := win.Write("data", nil)
-	return err
+	return win.Fprintf("data", "%s %s%s\n", flagLess, tabs, name)
 }
 
 // Buffer Interaction
