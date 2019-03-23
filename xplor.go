@@ -75,15 +75,21 @@ func findRoot() error {
 		root, err = os.Getwd()
 		return err
 	case 1: // start at path
+		var err error
 		root = filepath.Clean(flag.Arg(0))
-		if filepath.IsAbs(root) {
-			return nil
+		if !filepath.IsAbs(root) {
+			root, err = filepath.Abs(root)
+			if err != nil {
+				return err
+			}
 		}
-		cwd, err := os.Getwd()
+		info, err := os.Stat(root)
 		if err != nil {
 			return err
 		}
-		root = filepath.Join(cwd, root)
+		if !info.IsDir() {
+			return fmt.Errorf("%s: Not a directory", root)
+		}
 		return nil
 	default:
 		usage()
