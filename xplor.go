@@ -433,7 +433,7 @@ func loc(e *acme.Event) (string, error) {
 	if loc == "" {
 		return fail(nil)
 	}
-	prefix := fmt.Sprintf("%s-%s:", this, root)
+	prefix := fmt.Sprintf("%s-%s/:", this, root)
 	if !strings.HasPrefix(loc, prefix) {
 		return fail(nil)
 	}
