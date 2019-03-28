@@ -1,28 +1,55 @@
-xplor
-=====
+xplor, a tree-style (file) explorer for (plan9port) Acme
+========================================================
 
-Tree style (files) [explorer for p9p acme] [1].
-  
-If you're not an acme user, here's the easiest way to get acquainted: http://research.swtch.com/acme
+* [screenshot, regular](https://user-images.githubusercontent.com/505/55195521-111fce80-51ad-11e9-9725-58ceae7c785d.png)
+* [screenshot, monospaced](https://user-images.githubusercontent.com/505/55195505-02391c00-51ad-11e9-9293-7b58a37a49d7.png)
 
-Otherwise, you know the drill: button 3 (usually right click) to unfold/fold
-directories (the ones marked with a '+'.  Same click on a regular file
-sends it to the plumber, so default behaviour will be to open it if
-it's text.
-Button 2 (middle click) on an element of the tree prints the full path
-of the element in the +Errors window.
+Xplor is written for [Acme, the Plan 9 text editing environment][acme].
+I use Acme from [Plan 9 from User Space][plan9port].
+To learn about Acme, [Russ Cox’s Tour of Acme][tour] is a great place to start.
 
-B2 on Win or Xplor commands opens a new win (or a
-new xplor respectively), by default at the same root directory as
-their parent.  However, they make use of chording 2+1: just position
-your cursor wherever you want in the tree, then button 2 on Win or
-Xplor, hold it, and at the same time press button 1.  Tadaaa!  behold
-the chording magic!
+[acme]: http://acme.cat-v.org
+[plan9port]: https://9fans.github.io/plan9port/
+[tour]: https://research.swtch.com/acme
 
-DotDot redraws xplor with the root set as the parent directory.
 
-Hidden toggles displaying the hidden files/directories. It does not redraw the tree.
+Usage
+-----
+
+Button 3 (right click) on a directory to open or close it.
+Button 3 on a file to plumb it, e.g. to open text or source files.
+Button 2 (middle click) on any entry to prints its path in the Errors window.
+
+`Win` and `Xplor` open a new [win][] or xplor window.
+Button 2 to open those windows for the current xplor directory,
+2-1 chord to open the selected directory instead.
+
+`Get` reloads the current window.
+
+`All` toggles whether xplor displays hidden entries.
+
+`Up` opens parent of the current directory in the same window.
+
+[win]: https://9fans.github.io/plan9port/man/man1/acme.html
+
+
+Launch
+------
+
+	xplor
+
+to open the current working directory, or
+
+	xplor /path/to/directory
+
+to open a specific directory.
+
+
+Installation
+------------
+
+Xplor is `go get`able:
+
+	go get -u git.sr.ht/~mkhl/xplor
 
 Enjoy!
-
-[1]: https://bitbucket.org/mpl/xplor/raw/9844f21704b8/xplor.png        "screenshot"
