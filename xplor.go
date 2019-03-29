@@ -183,6 +183,7 @@ func printEntry(w io.Writer, path string, info os.FileInfo, depth int) error {
 	}
 	flag := flagFile
 	if info.IsDir() {
+		name += "/"
 		flag = flagLess
 		if open[path] {
 			flag = flagMore
