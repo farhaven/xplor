@@ -244,10 +244,6 @@ func print(addr string) error {
 // Selection
 
 func selectEntry(path string) error {
-	path, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
-	}
 	var steps strings.Builder
 	steps.WriteString("0") // beginning
 	for depth, name := range split(path) {
@@ -319,14 +315,11 @@ func abspath(addr string) (string, int, error) {
 
 // Determine components of path
 func split(path string) []string {
-	var part string
-	parts := make([]string, 0)
-	for path != "" && path != "." {
-		path, part = filepath.Split(path)
-		path = filepath.Clean(path)
-		parts = append([]string{part}, parts...)
+	if path == root {
+		return []string{}
 	}
-	return parts
+	path = strings.TrimPrefix(path, root + "/")
+	return strings.Split(path, string(filepath.Separator))
 }
 
 // System Interaction
