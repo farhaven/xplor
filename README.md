@@ -33,6 +33,17 @@ Button 2 to open those windows for the current xplor directory,
 [win]: https://9fans.github.io/plan9port/man/man1/acme.html
 
 
+### Why doesn’t chording work for any other commands?
+
+[This is a limitation of the acme(4) event system.](https://github.com/9fans/plan9port/issues/165)
+A client program can _receive_ events with chorded arguments,
+but it cannot send them back to Acme.
+(It could write them to the `event` file, but Acme would ignore them.)
+As a result, for a client program to support chorded arguments
+to builtin or external commands,
+it would have to reimplement the execution logic of Acme.
+
+
 Launch
 ------
 
