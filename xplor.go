@@ -318,7 +318,7 @@ func split(path string) []string {
 	if path == root {
 		return []string{}
 	}
-	path = strings.TrimPrefix(path, root + "/")
+	path = strings.TrimPrefix(path, root+"/")
 	return strings.Split(path, string(filepath.Separator))
 }
 
