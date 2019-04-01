@@ -28,7 +28,9 @@ Button 2 to open those windows for the current xplor directory,
 
 `All` toggles whether xplor displays hidden entries.
 
-`Up` opens parent of the current directory in the same window.
+`Up` opens parent of the current directory in the current window.
+
+`Cd` opens the chorded directory in the current window.
 
 [win]: https://9fans.github.io/plan9port/man/man1/acme.html
 

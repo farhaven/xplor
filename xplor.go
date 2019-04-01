@@ -23,7 +23,7 @@ import (
 
 const (
 	this     = "xplor"
-	tag      = "Get All Up Win Xplor "
+	tag      = "Get All Up Cd Win Xplor "
 	tab      = "\t"
 	flagFile = " "
 	flagLess = "▸"
@@ -216,6 +216,11 @@ func goUp() error {
 	return redraw()
 }
 
+func cd(dir string) error {
+	root = dir
+	return redraw()
+}
+
 // Line Interaction
 
 func look(addr string) error {
@@ -367,6 +372,12 @@ func handle(e *acme.Event) error {
 			return toggleAll()
 		case "Up":
 			return goUp()
+		case "Cd":
+			dir, err := loc(e)
+			if err != nil {
+				return err
+			}
+			return cd(dir)
 		case "Win":
 			exe := filepath.Join(PLAN9, "bin", "win")
 			dir, err := loc(e)
