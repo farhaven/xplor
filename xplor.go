@@ -118,7 +118,7 @@ func openWindow() error {
 // Drawing Structure
 
 func draw() error {
-	if err := win.Name("%s-%s/", this, root); err != nil {
+	if err := win.Name("%s/-%s", root, this); err != nil {
 		return err
 	}
 	var b bytes.Buffer
@@ -432,7 +432,7 @@ func loc(e *acme.Event) (string, error) {
 	if loc == "" {
 		return fail(nil)
 	}
-	prefix := fmt.Sprintf("%s-%s/:", this, root)
+	prefix := fmt.Sprintf("%s/-%s:", root, this)
 	if !strings.HasPrefix(loc, prefix) {
 		return fail(nil)
 	}
