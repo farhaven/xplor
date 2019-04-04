@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"9fans.net/go/acme"
@@ -258,7 +259,7 @@ func selectEntry(path string) error {
 	steps.WriteString("0") // beginning
 	for depth, name := range split(path) {
 		tabs := strings.Repeat(tab, depth)
-		fmt.Fprintf(&steps, "+/^..%s%s/", tabs, name) // next entry
+		fmt.Fprintf(&steps, "+/^..%s%s/", tabs, regexp.QuoteMeta(name)) // next entry
 	}
 	if err := win.Addr("%s", steps.String()); err != nil {
 		return err
