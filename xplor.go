@@ -23,12 +23,13 @@ import (
 )
 
 const (
-	this     = "xplor"
-	tag      = "Get All Up Cd Win Xplor "
-	tab      = "\t"
-	flagFile = " "
-	flagLess = "▸"
-	flagMore = "▾"
+	this       = "xplor"
+	tag        = "Get All Up Cd Win Xplor "
+	tab        = "\t"
+	flagFile   = " "
+	flagBroken = "X"
+	flagLess   = "▸"
+	flagMore   = "▾"
 )
 
 var (
@@ -172,7 +173,7 @@ func printContents(w io.Writer, dir string, depth int) error {
 		path := filepath.Join(dir, name)
 		if info.Mode()&os.ModeSymlink != 0 {
 			if info, err = os.Stat(path); err != nil {
-				return err
+				log.Println("can't read symlink:", err)
 			}
 		}
 		if err := printEntry(w, path, info, depth); err != nil {
@@ -188,7 +189,9 @@ func printEntry(w io.Writer, path string, info os.FileInfo, depth int) error {
 		return nil
 	}
 	flag := flagFile
-	if info.IsDir() {
+	if info == nil {
+		flag = flagBroken
+	} else if info.IsDir() {
 		name += "/"
 		flag = flagLess
 		if open[path] {
