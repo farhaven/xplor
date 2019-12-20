@@ -172,9 +172,9 @@ func printContents(w io.Writer, dir string, depth int) error {
 		name := info.Name()
 		path := filepath.Join(dir, name)
 		if info.Mode()&os.ModeSymlink != 0 {
-			if info, err = os.Stat(path); err != nil {
-				log.Println("can't read symlink:", err)
-			}
+			// The error from os.Stat is ignored because logging it just spams the +Errors window
+			// on each repaint.
+			info, _ = os.Stat(path)
 		}
 		if err := printEntry(w, path, info, depth); err != nil {
 			return err
