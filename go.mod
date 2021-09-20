@@ -1,4 +1,4 @@
-module git.sr.ht/~mkhl/xplor
+module github.com/farhaven/xplor
 
 go 1.12
 

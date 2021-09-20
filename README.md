@@ -61,8 +61,8 @@ to open a specific directory.
 Installation
 ------------
 
-Xplor is `go get`able:
+Xplor is `go install`able:
 
-	go get -u git.sr.ht/~mkhl/xplor
+	go install github.com/farhaven/xplor@latest
 
 Enjoy!
